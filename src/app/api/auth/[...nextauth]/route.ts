@@ -1,12 +1,16 @@
 import NextAuth from "next-auth";
 import GoogleProvider from "next-auth/providers/google";
 import CredentialsProvider from "next-auth/providers/credentials";
-import clientPromise from "@/app/lib/mongodb";
+import clientPromise from "@/lib/mongodb";
 import { MongoDBAdapter } from "@next-auth/mongodb-adapter";
 import bcrypt from "bcryptjs";
 
 const handler = NextAuth({
-  adapter: MongoDBAdapter(clientPromise),
+  adapter: MongoDBAdapter(clientPromise, {
+    collections: {
+      Users: "usuarios"
+    }
+  }),
   providers: [
     GoogleProvider({
       clientId: process.env.GOOGLE_CLIENT_ID!,
@@ -20,14 +24,14 @@ const handler = NextAuth({
       },
       authorize: async (credentials) => {
         const client = await clientPromise;
-        const users = client.db().collection("users");
+        const users = client.db().collection("usuarios");
         const user = await users.findOne({ email: credentials!.email });
       
         if (user && user.password) {
           const valid = await bcrypt.compare(credentials!.password, user.password);
           if (valid) {
             return {
-              id: user._id.toString(), // <- Esto es lo que NextAuth necesita
+              id: user._id.toString(),
               email: user.email,
               name: user.name,
             };
@@ -42,7 +46,7 @@ const handler = NextAuth({
     async signIn({ user, account }) {
       if (account?.provider === "google") {
         const client = await clientPromise;
-        const users = client.db().collection("users");
+        const users = client.db().collection("usuarios");
 
         const existing = await users.findOne({ email: user.email });
         if (!existing) {

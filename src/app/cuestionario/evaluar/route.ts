@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
-import User from "@/models/User";
-import clientPromise from "@/app/lib/mongodb";
+import userSchema from "@/models/User";
+import clientPromise from "@/lib/mongodb";
 
 export async function POST(req: Request) {
   await clientPromise;
@@ -25,7 +25,7 @@ export async function POST(req: Request) {
     };
   });
 
-  const user = await User.findOne({ email: session.user.email });
+  const user = await userSchema.findOne({ email: session.user.email });
   user.puntos += puntos;
   user.preguntas_contestadas.push(...resultado);
   await user.save();

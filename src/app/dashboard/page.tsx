@@ -1,29 +1,70 @@
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/auth";
-import connectDB from "@/lib/db";
-import User from "@/models/User";
+"use client";
 
-export default async function Dashboard() {
-  await connectDB();
-  const session = await getServerSession(authOptions);
-  const user = await User.findOne({ email: session?.user?.email });
+import { useSession } from "next-auth/react";
+import { useRouter } from "next/navigation";
+import { useEffect, useState } from "react";
+
+const categoriasDisponibles = [
+  "Matemáticas",
+  "Historia",
+  "Ciencia",
+  "Literatura",
+  "Arte",
+  "Tecnología",
+];
+
+export default function DashboardPage() {
+  const { data: session, status } = useSession();
+  const router = useRouter();
+  const [categoriasSeleccionadas, setCategoriasSeleccionadas] = useState<string[]>([]);
+
+  useEffect(() => {
+    if (status === "unauthenticated") {
+      router.push("/login");
+    }
+  }, [status, router]);
+
+  const toggleCategoria = (categoria: string) => {
+    if (categoriasSeleccionadas.includes(categoria)) {
+      setCategoriasSeleccionadas(categoriasSeleccionadas.filter(c => c !== categoria));
+    } else {
+      setCategoriasSeleccionadas([...categoriasSeleccionadas, categoria]);
+    }
+  };
+
+  const iniciarCuestionario = () => {
+    const categorias = categoriasSeleccionadas.length > 0 ? categoriasSeleccionadas.join(",") : "todas";
+    router.push(`/cuestionario?page=1&categorias=${encodeURIComponent(categorias)}`);
+  };
+
+  if (status === "loading") return <p>Cargando sesión...</p>;
 
   return (
-    <div className="p-6">
-      <h1 className="text-2xl font-bold mb-4">Bienvenido, {session?.user?.name}</h1>
-      <p className="mb-6 text-lg">Puntos totales: <strong>{user.puntos}</strong></p>
+    <div className="max-w-2xl mx-auto p-6">
+      <h1 className="text-3xl font-bold mb-4">¡Bienvenido, {session?.user?.name}!</h1>
+      <img src={session?.user?.image ?? ""} alt="Avatar" className="w-16 h-16 rounded-full mb-6" />
 
-      <h2 className="text-xl font-semibold mb-2">Historial de preguntas</h2>
-      <ul className="space-y-2 max-h-[400px] overflow-auto">
-        {user.preguntas_contestadas.slice(-20).reverse().map((p: any, i: number) => (
-          <li key={i} className="border p-3 rounded bg-white">
-            <p><strong>{p.pregunta}</strong></p>
-            <p>Tu respuesta: <span className={p.correcta ? "text-green-600" : "text-red-600"}>{p.respuesta_usuario}</span></p>
-            {!p.correcta && <p>Respuesta correcta: <strong>{p.respuesta_correcta}</strong></p>}
-            <p className="text-sm text-gray-500">Categoría: {p.categoria} | {new Date(p.fecha).toLocaleString()}</p>
-          </li>
+      <h2 className="text-xl font-semibold mb-2">Selecciona las categorías (opcional):</h2>
+      <div className="grid grid-cols-2 gap-4 mb-6">
+        {categoriasDisponibles.map((categoria) => (
+          <button
+            key={categoria}
+            className={`border px-4 py-2 rounded-lg ${
+              categoriasSeleccionadas.includes(categoria) ? "bg-blue-500 text-white" : "bg-white text-black"
+            }`}
+            onClick={() => toggleCategoria(categoria)}
+          >
+            {categoria}
+          </button>
         ))}
-      </ul>
+      </div>
+
+      <button
+        onClick={iniciarCuestionario}
+        className="bg-green-600 text-white px-6 py-3 rounded-lg hover:bg-green-700 transition"
+      >
+        Comenzar Cuestionario
+      </button>
     </div>
   );
 }

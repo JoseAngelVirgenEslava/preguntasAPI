@@ -1,4 +1,4 @@
-import clientPromise from "@/app/lib/mongodb";
+import clientPromise from "@/lib/mongodb";
 import { NextRequest } from "next/server";
 
 export async function GET() {
