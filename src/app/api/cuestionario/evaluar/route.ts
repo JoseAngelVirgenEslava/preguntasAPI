@@ -1,41 +1,68 @@
-// src/app/api/cuestionario/evaluar/route.ts
 import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
-import User from "@/models/User"; // Asumiendo que tu modelo se exporta como default
-import dbConnect from "@/lib/mongooseConnect"; // Importa la utilidad de conexión
+import User from "@/models/User";
+import dbConnect from "@/lib/mongooseConnect";
+
+interface PreguntaBaseAPI {
+  pregunta: string;
+  respuesta_correcta: string;
+  categoria: string;
+  tipo_pregunta: "opcion_multiple" | "respuesta_codigo_corta";
+}
+
+interface OpcionMultiplePreguntaAPI extends PreguntaBaseAPI {
+  opciones: string[];
+  tipo_pregunta: "opcion_multiple";
+}
+
+interface RespuestaCodigoPreguntaAPI extends PreguntaBaseAPI {
+  tipo_pregunta: "respuesta_codigo_corta";
+  opciones?: never;
+}
+
+type PreguntaAPI = OpcionMultiplePreguntaAPI | RespuestaCodigoPreguntaAPI;
+
 
 export async function POST(req: Request) {
   try {
-    await dbConnect(); // Asegura la conexión a MongoDB a través de Mongoose
+    await dbConnect();
     console.log("MongoDB connection established for /api/cuestionario/evaluar");
 
-    const session = await getServerSession(); // Considera pasar authOptions si las tienes personalizadas
+    const session = await getServerSession(); 
     if (!session?.user?.email) {
-      console.log("Unauthorized access attempt to /api/cuestionario/evaluar");
       return NextResponse.json({ error: "No autorizado" }, { status: 401 });
     }
     console.log("Session retrieved for user:", session.user.email);
 
-    const { preguntas, respuestas } = await req.json();
-    console.log("Received preguntas count:", preguntas?.length);
-    console.log("Received respuestas count:", respuestas?.length);
+    const body = await req.json();
+    const preguntasEnviadas: PreguntaAPI[] = body.preguntas;
+    const respuestasUsuario: string[] = body.respuestas;
 
-
-    if (!preguntas || !respuestas || preguntas.length !== respuestas.length) {
-        console.log("Invalid input: preguntas or respuestas missing or length mismatch.");
-        return NextResponse.json({ error: "Datos de entrada inválidos." }, { status: 400 });
+    if (!preguntasEnviadas || !respuestasUsuario || preguntasEnviadas.length !== respuestasUsuario.length) {
+      return NextResponse.json({ error: "Datos de entrada inválidos: preguntas o respuestas faltantes o con longitudes diferentes." }, { status: 400 });
     }
 
     let puntos = 0;
-    const resultadoDetallado = preguntas.map((p: any, i: number) => {
-      const correcta = p.respuesta_correcta === respuestas[i];
-      if (correcta) puntos++;
+    const resultadoDetallado = preguntasEnviadas.map((p, i) => {
+      let esCorrecta = false;
+      const respuestaUsuarioActual = respuestasUsuario[i] || ""; 
+
+      if (p.tipo_pregunta === "opcion_multiple") {
+        esCorrecta = p.respuesta_correcta === respuestaUsuarioActual;
+      } else if (p.tipo_pregunta === "respuesta_codigo_corta") {
+        esCorrecta = p.respuesta_correcta.trim().toLowerCase() === respuestaUsuarioActual.trim().toLowerCase();
+      }
+
+      if (esCorrecta) puntos++;
+
       return {
         pregunta: p.pregunta,
-        respuesta_usuario: respuestas[i],
+        tipo_pregunta: p.tipo_pregunta,
+        respuesta_usuario: respuestaUsuarioActual,
         respuesta_correcta: p.respuesta_correcta,
-        correcta,
-        categoria: p.categoria, // Asegúrate de que 'categoria' venga en el objeto 'p'
+        correcta: esCorrecta,
+        categoria: p.categoria,
+        opciones: (p as OpcionMultiplePreguntaAPI).opciones || null,
         fecha: new Date(),
       };
     });
@@ -47,24 +74,20 @@ export async function POST(req: Request) {
       console.log(`User not found: ${session.user.email}`);
       return NextResponse.json({ error: "Usuario no encontrado" }, { status: 404 });
     }
-    console.log(`User found. Current puntos: ${user.puntos}`);
 
-    // Asegúrate de que user.puntos y user.preguntas_contestadas estén inicializados
     user.puntos = (user.puntos || 0) + puntos;
     if (!Array.isArray(user.preguntas_contestadas)) {
         user.preguntas_contestadas = [];
     }
     user.preguntas_contestadas.push(...resultadoDetallado);
     
-    console.log(`Saving user. New puntos: ${user.puntos}, New preguntas_contestadas count: ${user.preguntas_contestadas.length}`);
     await user.save();
-    console.log("User data saved successfully.");
-
-    return NextResponse.json({ puntos });
+    console.log("User data saved successfully. Puntos obtenidos en este cuestionario:", puntos);
+    return NextResponse.json({ puntos, totalPreguntas: preguntasEnviadas.length });
 
   } catch (error: any) {
     console.error("Error en /api/cuestionario/evaluar:", error);
-    // Considera loguear error.message o error.stack para más detalles
-    return NextResponse.json({ error: "Error interno del servidor", details: error.message }, { status: 500 });
+    const errorMessage = error.message || "Ocurrió un error procesando la solicitud.";
+    return NextResponse.json({ error: "Error interno del servidor", details: errorMessage }, { status: 500 });
   }
 }

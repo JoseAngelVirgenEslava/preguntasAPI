@@ -1,4 +1,3 @@
-// lib/mongooseConnect.ts
 import mongoose, { ConnectionStates } from 'mongoose';
 
 const MONGODB_URI = process.env.MONGODB_URI;
@@ -9,18 +8,11 @@ if (!MONGODB_URI) {
   );
 }
 
-/**
- * Global is used here to maintain a cached connection across hot reloads
- * in development. This prevents connections from Sgrowing exponentially
- * during API Route usage.
- */
 interface MongooseCache {
   conn: typeof mongoose | null;
   promise: Promise<typeof mongoose> | null;
 }
 
-// Asegúrate de que globalThis esté correctamente tipado si usas una versión de TS muy estricta
-// Puedes usar (globalThis as any) o definir una interfaz global más específica.
 let cached = (globalThis as any).mongoose as MongooseCache;
 
 if (!cached) {
@@ -35,9 +27,7 @@ async function dbConnect(): Promise<typeof mongoose> {
 
   if (!cached.promise) {
     const opts = {
-      bufferCommands: false, // Desactiva el buffering si prefieres que falle rápido si no hay conexión
-      // useNewUrlParser: true, // Estas opciones ya no son necesarias en versiones recientes de Mongoose
-      // useUnifiedTopology: true,
+      bufferCommands: false,
     };
 
     cached.promise = mongoose.connect(MONGODB_URI!, opts).then((mongooseInstance) => {
@@ -45,15 +35,15 @@ async function dbConnect(): Promise<typeof mongoose> {
       return mongooseInstance;
     }).catch(error => {
         console.error('MongoDB: Connection error:', error);
-        cached.promise = null; // Resetea la promesa en caso de error para permitir reintentos
-        throw error; // Relanza el error para que sea manejado por quien llama
+        cached.promise = null;
+        throw error;
     });
   }
 
   try {
     cached.conn = await cached.promise;
   } catch (e) {
-    cached.promise = null; // Resetea la promesa en caso de error
+    cached.promise = null;
     throw e;
   }
   
@@ -62,7 +52,6 @@ async function dbConnect(): Promise<typeof mongoose> {
 
 export default dbConnect;
 
-// Función para verificar el estado de la conexión (opcional, para depuración)
 export async function getMongoConnectionState(): Promise<ConnectionStates> {
     if (!mongoose.connection) {
         return mongoose.ConnectionStates.disconnected;
